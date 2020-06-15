@@ -92,12 +92,11 @@ async def main() -> None:
     with open(config_file, "r") as f:
         config = json.load(f)
 
+    password = None
     if 'NIO_PASSWORD' in os.environ:
         password = os.environ['NIO_PASSWORD']
     elif 'password' in config:
         password = config['password']
-    else:
-        password = None
 
     client = CustomClient(config['home_server'], config['user_id'],
                           password=password)
