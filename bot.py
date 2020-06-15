@@ -4,6 +4,7 @@ import nio
 import os
 import sys
 
+
 class CustomClient(nio.AsyncClient):
     config = {}
 
@@ -20,7 +21,6 @@ class CustomClient(nio.AsyncClient):
         # if the store location doesn't exist, we'll make it
         if store_path and not os.path.isdir(store_path):
             os.mkdir(store_path)
-
 
         self.password = password
         self.creds_file = creds_file
@@ -63,7 +63,7 @@ class CustomClient(nio.AsyncClient):
         else:
             resp = await super().login(self.password)
             # check that we logged in succesfully
-            if (isinstance(resp, nio.LoginResponse)):
+            if isinstance(resp, nio.LoginResponse):
                 creds = {}
                 creds['access_token'] = resp.access_token
                 creds['user_id'] = resp.user_id
