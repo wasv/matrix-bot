@@ -1,7 +1,6 @@
-from nio import AsyncClient, LoginResponse, MatrixRoom, RoomMessageText
-
 import asyncio
 import json
+import nio
 import os
 import sys
 
@@ -9,75 +8,104 @@ CONFIG_FILE = os.environ['NIO_CONFIG_FILE'] if 'NIO_CONFIG_FILE' in os.environ\
     else "config.json"
 
 
-async def message_callback(room: MatrixRoom, event: RoomMessageText) -> None:
-    print(
-        f"Message received in room {room.display_name}\n"
-        f"{room.user_name(event.sender)} | {event.body}"
-    )
+class CustomClient(nio.AsyncClient):
+    config = {}
+
+    def __init__(self, homeserver: str, user: str, password='',
+                 device_id='', store_path='', creds_file='auth.json',
+                 ssl=None, proxy=None, config=None):
+        # Calling super.__init__ means we're running the __init__ method
+        # defined in AsyncClient, which this class derives from. That does a
+        # bunch of setup for us automatically
+        super().__init__(homeserver, user=user, device_id=device_id,
+                         store_path=store_path, config=config,
+                         ssl=ssl, proxy=proxy)
+
+        # if the store location doesn't exist, we'll make it
+        if store_path and not os.path.isdir(store_path):
+            os.mkdir(store_path)
 
 
-async def run_client(client: AsyncClient, config: dict):
-    # If there are no previously-saved credentials, we'll use the password
-    if not os.path.exists(config['creds_file']):
-        resp = await client.login(config['password'])
-        # check that we logged in succesfully
-        if (isinstance(resp, LoginResponse)):
-            with open(config['creds_file'], "w") as f:
-                # write the login details to disk
-                json.dump({
-                    "access_token": resp.access_token,
-                    "device_id": resp.device_id,
-                    "user_id": resp.user_id
-                }, f)
+        self.password = password
+        self.creds_file = creds_file
+
+        # auto-join room invites
+        self.add_event_callback(self.cb_autojoin_room, nio.InviteEvent)
+
+        # print all the messages we receive
+        self.add_event_callback(self.cb_print_messages, nio.RoomMessageText)
+
+    def cb_autojoin_room(self, room: nio.MatrixRoom, event: nio.InviteEvent):
+        """Callback to automatically joins a Matrix room on invite.
+
+        Arguments:
+            room {MatrixRoom} -- Provided by nio
+            event {InviteEvent} -- Provided by nio
+        """
+        self.join(room.room_id)
+        print(f"Joined Room: {room.name} - Is encrypted? {room.encrypted}")
+
+    async def cb_print_messages(self, room: nio.MatrixRoom,
+                                event: nio.RoomMessageText):
+        """Callback to print all received messages to stdout.
+
+        Arguments:
+            room {MatrixRoom} -- Provided by nio
+            event {RoomMessageText} -- Provided by nio
+        """
+        if event.decrypted:
+            encrypted_symbol = "🛡 "
         else:
-            print(f"Failed to log in: {resp}")
-            sys.exit(1)
+            encrypted_symbol = "⚠️ "
+        print(f"{room.display_name} |{encrypted_symbol}| "
+              f"{room.user_name(event.sender)}: {event.body}")
 
-    with open(config['creds_file'], "r") as f:
-        creds = json.load(f)
+    async def login(self):
+        # If there are no previously-saved credentials, we'll use the password
+        if os.path.exists(self.creds_file):
+            with open(self.creds_file, "r") as f:
+                creds = json.load(f)
+        else:
+            resp = await super().login(self.password)
+            # check that we logged in succesfully
+            if (isinstance(resp, nio.LoginResponse)):
+                creds = {}
+                creds['access_token'] = resp.access_token
+                creds['user_id'] = resp.user_id
+                creds['device_id'] = resp.device_id
 
-    client.access_token = creds['access_token']
-    client.user_id = creds['user_id']
-    client.device_id = creds['device_id']
+                with open(self.creds_file, "w") as f:
+                    # write the login details to disk
+                    json.dump(creds, f)
+            else:
+                print(f"Failed to log in: {resp}")
+                sys.exit(1)
 
-    client.add_event_callback(message_callback, RoomMessageText)
+        self.access_token = creds['access_token']
+        self.user_id = creds['user_id']
+        self.device_id = creds['device_id']
 
-    # Now we can send messages as the user
-    await client.join(config['room_id'])
-    print("Logged in using stored credentials")
-
-    resp = await client.room_send(
-        room_id=config['room_id'],
-        message_type="m.room.message",
-        content={
-            "msgtype": "m.text",
-            "body": "Hello world!"
-        }
-    )
-    print("Result of test message:")
-    print(f"Status: {resp.transport_response.status}, Event: {resp.event_id}")
-
-    await client.sync_forever(30000, full_state=True)
+        print("Logged in.")
 
 
 async def main() -> None:
     with open(CONFIG_FILE, "r") as f:
         config = json.load(f)
 
-    if 'creds_file' not in config:
-        config['creds_file'] = "auth.json"
-
     if 'NIO_PASSWORD' in os.environ:
-        config['password'] = os.environ['NIO_PASSWORD']
+        password = os.environ['NIO_PASSWORD']
+    elif 'password' in config:
+        password = config['password']
+    else:
+        password = None
 
-    client = AsyncClient(config['home_server'], config['user_id'])
+    client = CustomClient(config['home_server'], config['user_id'],
+                          password=password)
 
-    if not config['room_id'].startswith('!'):
-        resp = await client.room_resolve_alias(config['room_id'])
-        config['room_id'] = resp.room_id
+    await client.login()
 
     try:
-        await run_client(client, config)
+        await client.sync_forever(30000, full_state=True)
     finally:
         await client.close()
 
