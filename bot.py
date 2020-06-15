@@ -4,10 +4,6 @@ import nio
 import os
 import sys
 
-CONFIG_FILE = os.environ['NIO_CONFIG_FILE'] if 'NIO_CONFIG_FILE' in os.environ\
-    else "config.json"
-
-
 class CustomClient(nio.AsyncClient):
     config = {}
 
@@ -89,7 +85,11 @@ class CustomClient(nio.AsyncClient):
 
 
 async def main() -> None:
-    with open(CONFIG_FILE, "r") as f:
+    config_file = "config.json"
+    if 'NIO_CONFIG_FILE' in os.environ:
+        config_file = os.environ['NIO_CONFIG_FILE']
+
+    with open(config_file, "r") as f:
         config = json.load(f)
 
     if 'NIO_PASSWORD' in os.environ:
