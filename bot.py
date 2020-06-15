@@ -57,7 +57,6 @@ class CustomClient(nio.AsyncClient):
               f"{room.user_name(event.sender)}: {event.body}")
 
     async def login(self):
-        # If there are no previously-saved credentials, we'll use the password
         if os.path.exists(self.creds_file):
             with open(self.creds_file, "r") as f:
                 creds = json.load(f)
