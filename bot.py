@@ -79,6 +79,7 @@ class CustomClient(nio.AsyncClient):
         self.access_token = creds['access_token']
         self.user_id = creds['user_id']
         self.device_id = creds['device_id']
+        self.load_store()
 
         print("Logged in.")
 
@@ -98,7 +99,7 @@ async def main() -> None:
         password = config['password']
 
     client = CustomClient(config['home_server'], config['user_id'],
-                          password=password)
+                          password=password, store_path="./store")
 
     await client.login()
 
