@@ -31,14 +31,14 @@ class CustomClient(nio.AsyncClient):
         # print all the messages we receive
         self.add_event_callback(self.cb_print_messages, nio.RoomMessageText)
 
-    def cb_autojoin_room(self, room: nio.MatrixRoom, event: nio.InviteEvent):
+    async def cb_autojoin_room(self, room: nio.MatrixRoom, event: nio.InviteEvent):
         """Callback to automatically joins a Matrix room on invite.
 
         Arguments:
             room {MatrixRoom} -- Provided by nio
             event {InviteEvent} -- Provided by nio
         """
-        self.join(room.room_id)
+        await self.join(room.room_id)
         print(f"Joined Room: {room.name} - Is encrypted? {room.encrypted}")
 
     async def cb_print_messages(self, room: nio.MatrixRoom,
